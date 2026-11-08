@@ -70,7 +70,7 @@ Python 3.8+. All inputs are in the `Params` dataclass at the top of `lng_hedge.p
 
 ## Code structure
 
-`lng_hedge.py` is organised in four blocks: **1. Input** (`Params`), **2. Model** (price simulation, P&L of cargo, swap and put), **3. Solve** (hedge ratio, strategy comparison), **4. Post-process** (risk table, validation, plots). Every function has a technical docstring plus a plain-language explanation.
+`lng_hedge.py` is organised in four blocks: **1. Input** (`Params`), **2. Model** (price simulation, P&L of cargo, swap and put), **3. Solve** (hedge ratio, strategy comparison), **4. Post-process** (risk table, validation, plots).
 
 ## Limitations
 
