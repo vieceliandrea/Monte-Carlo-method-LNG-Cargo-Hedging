@@ -8,7 +8,7 @@ An LNG trader buys a cargo at a fixed cost and sells it in 3 months at a market
 price (JKM, the Asian benchmark). How uncertain is the margin, and how much does
 a hedge with TTF derivatives (the European benchmark) reduce that uncertainty?
 
-Method (technical)
+Method
 ------------------
 * Prices: one-factor mean-reverting log-price model (Schwartz, 1997), consistent
   with the forward curve: E[S_t] = F0. JKM and TTF are correlated.
@@ -17,12 +17,6 @@ Method (technical)
 * Strategies: no hedge, swap with h = 1, swap with the minimum-variance ratio h*,
   and a put option on TTF.
 * Risk metrics: mean, std, P5, Expected Shortfall 5%, P95, probability of loss.
-
-Method (in plain words)
------------------------
-Each price wanders randomly but is pulled back towards its forward price, like a
-dog on an elastic leash. We replay 100,000 possible futures, compute the margin
-in each one, and compare how spread-out the results are with and without a hedge.
 
 Notes
 -----
@@ -36,19 +30,17 @@ from math import erf, sqrt
 import matplotlib.pyplot as plt
 import numpy as np
 
-# Strategy names, used as dictionary keys and as labels in tables and plots.
+# Strategy names.
 NO_HEDGE = "No hedge"
 SWAP_FULL = "Swap TTF h=1"
 SWAP_MINVAR = "Swap TTF h*"
 
 
-# ============================== 1. INPUT ==============================
+# 1. INPUT ==============================
 @dataclass
 class Params:
     """
-    All inputs of the study in one place (the "knobs" of the experiment).
-
-    Change a value here to run a different scenario; units are in square brackets.
+    Change a value here to run a different scenario.
     """
     # --- Cargo ---
     volume: float = 3.5e6      # [MMBtu] energy in one cargo (~170k m3 carrier, net of heel and boil-off)
@@ -70,19 +62,15 @@ class Params:
     seed: int = 42             # [-] random seed: same seed, same results
 
 
-# ============================== 2. MODEL ==============================
+# 2. MODEL ==============================
 def simulate_prices(p):
     """
     Simulate correlated JKM and TTF daily price paths.
 
-    Technical: for each index, X is a zero-mean Ornstein-Uhlenbeck process
+    For each index, X is a zero-mean Ornstein-Uhlenbeck process
     (dX = -kappa*X dt + sigma dW) simulated with its exact discretisation, and the
     price is S = F0 * exp(X - Var(X)/2), which guarantees E[S_t] = F0 (no drift
     away from the forward). The two indices share correlated random shocks (rho).
-
-    In plain words: the price is a dog on an elastic leash. The owner stands at the
-    forward price F0, the dog runs around randomly, and the leash (kappa) keeps
-    pulling it back. JKM and TTF are two dogs pushed partly by the same wind.
 
     Returns
     -------
@@ -116,9 +104,8 @@ def pricing_average(S, window):
     """
     Average of the last `window` daily prices of each path [$/MMBtu].
 
-    Technical: cargo sale price and swap/put settlement are based on an average
+    Cargo sale price and swap/put settlement are based on an average
     price over the pricing window (an "Asian" feature), not on a single day.
-    In plain words: like a grade average instead of one exam; it moves less.
     """
     return S[:, -window:].mean(axis=1)
 
@@ -126,8 +113,7 @@ def pricing_average(S, window):
 def pnl_cargo(A_jkm, p):
     """
     Unhedged cargo margin [$] = volume * (JKM average price - cost).
-
-    In plain words: what we earn (or lose) by selling the gas for more (or less) than it cost us.
+    What we earn (or lose) by selling the gas for more (or less) than it cost us.
     """
     return p.volume * (A_jkm - p.cost)
 
@@ -136,10 +122,9 @@ def pnl_swap(A_ttf, h, p):
     """
     P&L [$] of selling a TTF swap on h*volume at the fixed price K = TTF forward.
 
-    Technical: the swap pays K - A_TTF. It costs nothing at inception because
+    The swap pays K - A_TTF. It costs nothing at inception because
     K equals the expected average price, so its expected P&L is zero.
-    In plain words: a deal with a friend: if TTF ends below K he pays us the difference,
-    if above K we pay him. It cancels part of the cargo's ups and downs.
+    It cancels part of the cargo's ups and downs.
     """
     return h * p.volume * (p.F0_ttf - A_ttf)
 
@@ -148,8 +133,8 @@ def pnl_put(A_ttf, h, strike, premium, p):
     """
     P&L [$] of buying put options on h*volume of TTF, net of the premium paid.
 
-    Technical: Asian put payoff = max(strike - A_TTF, 0) per MMBtu.
-    In plain words: insurance. We pay a premium up front; it pays out only if TTF
+    Asian put payoff = max(strike - A_TTF, 0) per MMBtu.
+    We pay a premium up front; it pays out only if TTF
     falls below the strike, and we keep all the upside otherwise.
     """
     return h * p.volume * (np.maximum(strike - A_ttf, 0.0) - premium)
@@ -160,10 +145,9 @@ def min_variance_ratio(A_jkm, A_ttf):
     """
     Minimum-variance hedge ratio h* = Cov(JKM, TTF) / Var(TTF).
 
-    Technical: the slope of the least-squares regression of JKM on TTF; it is the
+    The slope of the least-squares regression of JKM on TTF; it is the
     h that minimises the variance of the hedged margin.
-    In plain words: if JKM moves 0.85 $ on average for each 1 $ that TTF moves,
-    hedging 85% of the volume cancels the most risk. Hedging more adds risk.
+    Hedging more adds risk.
     """
     return np.cov(A_jkm, A_ttf)[0, 1] / np.var(A_ttf, ddof=1)
 
@@ -177,10 +161,9 @@ def run_strategies(p):
     """
     Simulate prices and compute the P&L of every strategy on the same random futures.
 
-    Technical: all strategies share the same paths, so differences between them
+    All strategies share the same paths, so differences between them
     come only from the hedge, not from Monte Carlo noise. The put premium is the
     Monte Carlo fair value E[max(K - A_TTF, 0)] (no dealer margin, rates ~ 0).
-    In plain words: same 100,000 futures, four different ways of facing them.
 
     Returns
     -------
@@ -211,10 +194,8 @@ def std_vs_hedge_ratio(A_jkm, A_ttf, p, h_grid):
     """
     Std of the hedged cargo P&L [$] for each swap hedge ratio h in `h_grid`.
 
-    Technical: brute-force scan of h; the minimum of this curve must coincide with
-    h*, and it stays above zero because JKM and TTF are not perfectly correlated
-    (basis risk).
-    In plain words: "how risky is the cargo if I hedge 0%, 10%, 20%, ... of it?"
+    The minimum of this curve must coincide with h*, and it stays above zero 
+    because JKM and TTF are not perfectly correlated (basis risk).
     """
     base = pnl_cargo(A_jkm, p)
     return np.array([np.std(base + pnl_swap(A_ttf, h, p)) for h in h_grid])
@@ -247,11 +228,9 @@ def verify_vs_analytical(p, info):
     """
     VERIFICATION: Monte Carlo vs closed-form price of a European put on TTF (Black-76).
 
-    Technical: the Asian put used in the strategies has no simple formula, so we test
-    its European sibling (payoff on the last day only), where ln S_T is normal and
+    Test a European sibling (payoff on the last day only), where ln S_T is normal and
     Put = K*N(-d2) - F*N(-d1). If the simulator is right, the two prices agree
     within the Monte Carlo standard error.
-    In plain words: the "proof by nine": solve the same problem a second, exact way.
     """
     K = p.put_strike_ratio * p.F0_ttf
     var_T = p.sigma_ttf**2 / (2 * p.kappa) * (1 - np.exp(-2 * p.kappa * p.T))   # Var(X_T)
@@ -276,8 +255,7 @@ def convergence_study(p, Ns=(1_000, 10_000, 100_000)):
 
     Technical: the standard error of the put premium is std(payoff)/sqrt(N), so
     'error * sqrt(N)' should stay roughly constant.
-    In plain words: to cut the error in half you need four times more simulated futures
-    (same idea as a grid-independence study in CFD).
+    To cut the error in half you need four times more simulated futures.
     """
     print(f"{'N':>8}{'put premium':>13}{'error':>10}{'error*sqrt(N)':>15}")
     for N in Ns:
@@ -292,7 +270,7 @@ def sensitivity_rho(p, rhos=(0.5, 0.7, 0.85, 0.95)):
     """
     SENSITIVITY: hedge effectiveness vs JKM-TTF correlation (expected ~ rho^2).
 
-    In plain words: the less TTF resembles JKM, the less a TTF hedge can protect us.
+    The less TTF resembles JKM, the less a TTF hedge can protect us.
     """
     print(f"{'rho':>6}{'h*':>7}{'efficacy':>10}{'rho^2':>8}")
     for rho in rhos:
